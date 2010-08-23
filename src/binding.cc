@@ -38,6 +38,7 @@ class Connection : public EventEmitter {
       NODE_SET_PROTOTYPE_METHOD(t, "close", Close);
       NODE_SET_PROTOTYPE_METHOD(t, "multicast", Multicast);
       NODE_SET_PROTOTYPE_METHOD(t, "join", Join);
+      NODE_SET_PROTOTYPE_METHOD(t, "readSync", ReadSync);
 
       target->Set(String::NewSymbol("Connection"), t->GetFunction());
     }
@@ -48,7 +49,6 @@ class Connection : public EventEmitter {
       int ret = SP_connect( Spread_name, User, 0, 1, &Mbox, Private_group );
 
       Emit((ret<0 ? error_symbol : connected_symbol), 0, NULL);
-      Read_message();
     }
 
     void Close() {
@@ -71,6 +71,37 @@ class Connection : public EventEmitter {
         Local<Value> args[1];
         args[0] = Local<Value>::New(Integer::New(ret));
         Emit(error_symbol, 1, args);
+      }
+    }
+
+    Local<String> ReadSync(int* ret) {
+        char             mess[MAX_MESSLEN];
+        char             sender[MAX_GROUP_NAME];
+        char             target_groups[MAX_MEMBERS][MAX_GROUP_NAME];
+        int              num_groups;
+        int              service_type;
+        int16            mess_type;
+        int              endian_mismatch;
+      
+      while(SP_poll(Mbox)>0){
+
+        *ret = SP_receive( Mbox, &service_type, sender, 100, &num_groups, target_groups,
+                &mess_type, &endian_mismatch, sizeof(mess), mess );
+
+        if (*ret < 0 ){
+          Emit(error_symbol, 0, NULL);
+        }else if( Is_regular_mess( service_type ) ){
+          mess[*ret] = 0;
+          return String::New(mess);
+        }else{
+          mess[*ret] = 0;
+          Local<Value> args[2];
+          args[0] = Local<Value>::New(String::New(mess));
+          args[1] = Local<Value>::New(Integer::New(service_type));
+          Emit(message_symbol, 2, args);
+        }
+
+        *ret = 0;
       }
     }
 
@@ -146,41 +177,26 @@ class Connection : public EventEmitter {
       return Undefined();
     }
 
+    static Handle<Value> ReadSync(const Arguments &args) {
+      HandleScope scope;
+      Local<Value> result;
+      int ret = 0;
+
+      String::Utf8Value Channel(args[0]->ToString());
+
+      Connection *connection = ObjectWrap::Unwrap<Connection>(args.This());
+
+      result = connection->ReadSync(&ret);
+
+      if(ret > 0) {
+        return scope.Close( result );
+      }
+      return Undefined();
+    }
+
   private:
     char    Private_group[20];
     mailbox Mbox;
-
-    void Read_message(){
-        char             mess[MAX_MESSLEN];
-        char             sender[MAX_GROUP_NAME];
-        char             target_groups[MAX_MEMBERS][MAX_GROUP_NAME];
-        int              num_groups;
-        int              service_type;
-        int16            mess_type;
-        int              endian_mismatch;
-        int              ret;
-
-      while(true){
-
-        ret = SP_receive( Mbox, &service_type, sender, 100, &num_groups, target_groups, 
-                &mess_type, &endian_mismatch, sizeof(mess), mess );
-
-        if (ret < 0 ){
-          Emit(error_symbol, 0, NULL);
-        }else if( Is_regular_mess( service_type ) ){
-          mess[ret] = 0;
-          Local<Value> args[1];
-          args[0] = Local<Value>::New(String::New(mess));
-          Emit(message_symbol, 1, args);
-        }else{
-          mess[ret] = 0;
-          Local<Value> args[2];
-          args[0] = Local<Value>::New(String::New(mess));
-          args[1] = Local<Value>::New(Integer::New(service_type));
-          Emit(message_symbol, 2, args);
-        }
-      }
-    }
 };
 
 extern "C" void
