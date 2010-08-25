@@ -10,19 +10,23 @@ con.on('connected', function(){
   console.log('connected');
   self.join('NODE');
 
+  self.read(function(msg){     
+    console.log('async recv:' + msg);
+  }); 
+
   setInterval(function(){
     var msg = 'NODE' + (i++);
     console.log('send:' + msg);
     self.multicast('NODE', msg);
   }, 1000);
-
+/*
   setInterval(function () {
     var msg;
     while((msg = self.readSync()) != undefined){
       console.log('recv:' + msg);
     }
   }, 100);
-
+*/
 });
 
 con.on('error', function(){

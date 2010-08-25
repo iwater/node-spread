@@ -18,6 +18,7 @@ def configure(conf):
 
 def build(context, target=target):
     obj = context.new_task_gen('cxx', 'shlib', 'node_addon')
+    obj.cxxflags = ["-g", "-D_FILE_OFFSET_BITS=64", "-D_LARGEFILE_SOURCE", "-Wall"]
     
     obj.uselib = 'SPREAD'
     obj.source = 'src/binding.cc'
